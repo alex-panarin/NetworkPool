@@ -1,0 +1,159 @@
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Threading.Channels;
+
+namespace NetworkPool
+{
+    internal enum JobState
+    {
+        Run,
+        Read,
+        Write,
+        Close
+    }
+
+    internal interface IJobState
+    {
+        JobState State { get; }
+    }
+
+    internal abstract class JobPool<TValue>
+        : IDisposable
+        where TValue : class, IJobState
+    {
+        readonly List<Task> _tasks = [];
+        readonly SemaphoreSlim _semaphoreRead = new SemaphoreSlim(1);
+        readonly SemaphoreSlim _semaphoreWrite = new SemaphoreSlim(1);
+        readonly ConcurrentQueue<TValue> _queue = [];
+        readonly CancellationTokenSource _cancellationTokenSource = new();
+        readonly Channel<TValue> _channel = Channel.CreateUnbounded<TValue>(new UnboundedChannelOptions
+        {
+            AllowSynchronousContinuations = false,
+            SingleReader = false,
+            SingleWriter = false,
+        });
+        volatile bool _interrupted = true;
+        private readonly Func<TValue, Task<bool>> _doReadJob;
+        private readonly Func<TValue, Task<bool>> _doWriteJob;
+
+        public JobPool(int count = -1)
+            : this(null, null, count)
+        {
+        }
+        public JobPool(Func<TValue, Task<bool>>? doReadJob
+            , Func<TValue, Task<bool>>? doWriteJob
+            , int count = -1) 
+            
+        {
+            _doReadJob = doReadJob ?? DoReadInternal;
+            _doWriteJob = doWriteJob ?? DoWriteInternal;
+
+            if (count == -1)
+                count = Environment.ProcessorCount / 2;
+
+            Debug.WriteLine($"Job queue start {count}");
+
+            Enumerable.Range(0, count)
+                .ForEach(_ =>
+                {
+                    _tasks.Add(DoRead(_semaphoreRead, _queue, _channel.Writer));
+                    _tasks.Add(DoWrite(_semaphoreWrite, _queue, _channel.Reader));
+                });
+        }
+
+        protected abstract Task<bool> DoReadInternal(TValue value);
+        protected abstract Task<bool> DoWriteInternal(TValue value);
+
+        public void AddJob(TValue val)
+        {
+            _queue.Enqueue(val);
+        }
+        private async Task DoRead(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer)
+        {
+            await Task.Yield();
+            Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Start");
+
+            try
+            {
+                while (!_cancellationTokenSource.IsCancellationRequested)
+                {
+                    if (_interrupted) continue;
+
+                    @event.Wait(_cancellationTokenSource.Token);
+                    Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Running ...");
+                    @event.Release();
+
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                        break;
+
+                    if (queue.TryDequeue(out var val))
+                    {
+                        if (val.State == JobState.Read)
+                        {
+                            await writer.WriteAsync(val, _cancellationTokenSource.Token);
+                            Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId}, Get value: {val}");
+                        }
+                        else if (val.State == JobState.Write)
+                        {
+                            var result = await _doWriteJob(val);
+                            if (result
+                                && val.State != JobState.Close)
+                            {
+                                queue.Enqueue(val);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        private async Task DoWrite(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader)
+        {
+            await Task.Yield();
+            Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Start");
+            try
+            {
+                while (!_cancellationTokenSource.IsCancellationRequested)
+                {
+                    if (_interrupted) continue;
+
+                    @event.Wait(_cancellationTokenSource.Token);
+                    Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Running ...");
+                    @event.Release();
+
+                    if (_cancellationTokenSource.IsCancellationRequested)
+                        break;
+
+                    var val = await reader.ReadAsync(_cancellationTokenSource.Token);
+
+                    Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId}, Set value: {val}");
+
+                    if (await _doReadJob(val))
+                        queue.Enqueue(val);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        public void Join()
+        {
+            _interrupted = false;
+            Task.WaitAll(_tasks.ToArray());
+        }
+        public virtual void Dispose()
+        {
+            Close();
+            _semaphoreRead.Dispose();
+            _semaphoreWrite.Dispose();
+            _cancellationTokenSource.Dispose();
+            _queue.ForEach(s => { if (s is IDisposable disposable) disposable.Dispose(); });
+        }
+        internal void Close()
+        {
+            _cancellationTokenSource.Cancel();
+        }
+    }
+}
