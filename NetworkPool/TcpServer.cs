@@ -15,16 +15,16 @@ namespace NetworkPool
 
         public Task Start()
         {
-            var task = Task.Factory.StartNew((l) =>
+            var task = Task.Factory.StartNew((lstnr) =>
             {
-                var listner = (TcpListener)l!;
-                _listener.Start();
+                var listener = (TcpListener)lstnr!;
+                listener.Start();
                 Console.WriteLine("Server running ...");
                 try
                 {
                     while (true)
                     {
-                        var session = new Session(_listener.AcceptSocket());
+                        var session = new Session(listener.AcceptSocket());
                         session.State = JobState.Read; // Need to read session data
                         AddJob(session);
 
