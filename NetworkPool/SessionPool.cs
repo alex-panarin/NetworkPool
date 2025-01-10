@@ -8,31 +8,17 @@
         public SessionPool(IProcessor<Session> processor)
             : base()
         {
-            _processor = processor;
+            _processor = processor ?? throw new ArgumentNullException(nameof(processor));
         }
         protected override async Task<bool> DoRead(Session session)
         {
-            var buffer = await session.ReadAsync();
+            await session.ReadAsync();
 
-            if (buffer.HasClosed)
-            {
-                Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Remove connection {session.Id} ===");
-                session.Dispose();
-                return false;
-            }
-
-            if (buffer.IsNotEmpty)
-            {
-                _processor.ProcessRead(session);
-            }
-            return session.State == JobState.Write;
+            return await _processor.ProcessRead(session); 
         }
         protected override async Task<bool> DoWrite(Session session)
         {
-            _processor?.ProcessWrite(session);
-            await session.WriteAsync($"Echo: {session.GetLastValue()}");
-
-            return session.State == JobState.Read;
+            return await _processor.ProcessWrite(session); 
         }
     }
 }

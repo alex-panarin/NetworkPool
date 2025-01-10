@@ -82,6 +82,7 @@ namespace NetworkPool
         }
         public override string ToString() => $"Session: {Id}";
         public string GetLastValue() => buffer.GetString();
+        public SessionBuffer GetLastData() => buffer;
         public void Dispose()
         {
             Dispose(true);
