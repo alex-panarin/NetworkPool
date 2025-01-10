@@ -10,23 +10,21 @@ namespace NetworkPool
     internal class SessionProcessor
         : IProcessor<Session>
     {
-        public Task<bool> ProcessRead(Session session)
+        public async Task<bool> ProcessRead(Session session)
         {
-            var buffer = session.GetLastData();
+            var buffer = await session.ReadAsync();
             if (buffer.HasClosed)
             {
                 Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Remove connection {session.Id} ===");
                 session.Dispose();
-                return Task.FromResult(false);
+                return false;
             }
             if (buffer.IsNotEmpty)
             {
+                Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Data: {session.GetLastValue()} ===");
                 session.State = JobState.Write; // Need Answer
             }
-            
-            Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Data: {session.GetLastValue()} ===");
-
-            return Task.FromResult(session.State == JobState.Write);
+            return session.State != JobState.Close;
         }
 
         public async Task<bool> ProcessWrite(Session session)

@@ -12,8 +12,6 @@
         }
         protected override async Task<bool> DoRead(Session session)
         {
-            await session.ReadAsync();
-
             return await _processor.ProcessRead(session); 
         }
         protected override async Task<bool> DoWrite(Session session)
