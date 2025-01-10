@@ -10,7 +10,7 @@
         {
             _processor = processor;
         }
-        protected override async Task<bool> DoReadInternal(Session session)
+        protected override async Task<bool> DoRead(Session session)
         {
             var buffer = await session.ReadAsync();
 
@@ -27,7 +27,7 @@
             }
             return session.State == JobState.Write;
         }
-        protected override async Task<bool> DoWriteInternal(Session session)
+        protected override async Task<bool> DoWrite(Session session)
         {
             _processor?.ProcessWrite(session);
             await session.WriteAsync($"Echo: {session.GetLastValue()}");

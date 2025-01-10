@@ -45,8 +45,8 @@ namespace NetworkPool
             , int count = -1) 
             
         {
-            _doReadJob = doReadJob ?? DoReadInternal;
-            _doWriteJob = doWriteJob ?? DoWriteInternal;
+            _doReadJob = doReadJob ?? DoRead;
+            _doWriteJob = doWriteJob ?? DoWrite;
 
             if (count == -1)
                 count = Environment.ProcessorCount / 2;
@@ -56,19 +56,19 @@ namespace NetworkPool
             Enumerable.Range(0, count)
                 .ForEach(_ =>
                 {
-                    _tasks.Add(DoRead(_semaphoreRead, _queue, _channel.Writer));
-                    _tasks.Add(DoWrite(_semaphoreWrite, _queue, _channel.Reader));
+                    _tasks.Add(ProcessPool(_semaphoreRead, _queue, _channel.Writer));
+                    _tasks.Add(ProcessJob(_semaphoreWrite, _queue, _channel.Reader));
                 });
         }
 
-        protected abstract Task<bool> DoReadInternal(TValue value);
-        protected abstract Task<bool> DoWriteInternal(TValue value);
+        protected abstract Task<bool> DoRead(TValue value);
+        protected abstract Task<bool> DoWrite(TValue value);
 
         public void AddJob(TValue val)
         {
             _queue.Enqueue(val);
         }
-        private async Task DoRead(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer)
+        private async Task ProcessPool(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer)
         {
             await Task.Yield();
             Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Start");
@@ -109,7 +109,7 @@ namespace NetworkPool
             {
             }
         }
-        private async Task DoWrite(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader)
+        private async Task ProcessJob(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader)
         {
             await Task.Yield();
             Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Start");
