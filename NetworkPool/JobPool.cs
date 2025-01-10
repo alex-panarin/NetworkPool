@@ -139,7 +139,7 @@ namespace NetworkPool
                     //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId}, Set value: {val}");
 
                     if (await _doReadJob(val))
-                        await writer.WriteAsync(val);
+                        await writer.WriteAsync(val, _cancellationTokenSource.Token);
                         //queue.Enqueue(val);
                 }
             }
