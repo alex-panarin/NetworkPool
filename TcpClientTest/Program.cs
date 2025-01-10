@@ -12,7 +12,7 @@ namespace TcpClientTest
             Stopwatch sw = new Stopwatch();
             sw.Start();
             List<Task> tasks = 
-                new List<Task>(Enumerable.Range(0, 100)
+                new List<Task>(Enumerable.Range(0, 500)
                     .Select(i =>
                     {
                         return Task.Factory.StartNew(async () =>
