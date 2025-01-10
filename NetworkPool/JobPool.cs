@@ -71,7 +71,7 @@ namespace NetworkPool
         private async Task ProcessPool(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer)
         {
             await Task.Yield();
-            Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Start");
+            //Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Start");
 
             try
             {
@@ -80,7 +80,7 @@ namespace NetworkPool
                     if (_interrupted) continue;
 
                     @event.Wait(_cancellationTokenSource.Token);
-                    Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Running ...");
+                    //Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Running ...");
                     @event.Release();
 
                     if (_cancellationTokenSource.IsCancellationRequested)
@@ -91,7 +91,7 @@ namespace NetworkPool
                         if (val.State == JobState.Read)
                         {
                             await writer.WriteAsync(val, _cancellationTokenSource.Token);
-                            Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId}, Get value: {val}");
+                            //Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId}, Get value: {val}");
                         }
                         else if (val.State == JobState.Write)
                         {
@@ -112,7 +112,7 @@ namespace NetworkPool
         private async Task ProcessJob(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader)
         {
             await Task.Yield();
-            Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Start");
+            //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Start");
             try
             {
                 while (!_cancellationTokenSource.IsCancellationRequested)
@@ -120,7 +120,7 @@ namespace NetworkPool
                     if (_interrupted) continue;
 
                     @event.Wait(_cancellationTokenSource.Token);
-                    Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Running ...");
+                    //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Running ...");
                     @event.Release();
 
                     if (_cancellationTokenSource.IsCancellationRequested)
@@ -128,7 +128,7 @@ namespace NetworkPool
 
                     var val = await reader.ReadAsync(_cancellationTokenSource.Token);
 
-                    Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId}, Set value: {val}");
+                    //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId}, Set value: {val}");
 
                     if (await _doReadJob(val))
                         queue.Enqueue(val);

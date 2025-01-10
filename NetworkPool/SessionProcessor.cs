@@ -15,13 +15,13 @@ namespace NetworkPool
             var buffer = await session.ReadAsync();
             if (buffer.HasClosed)
             {
-                Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Remove connection {session.Id} ===");
+                //Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Remove connection {session.Id} ===");
                 session.Dispose();
                 return false;
             }
             if (buffer.IsNotEmpty)
             {
-                Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Data: {session.GetLastValue()} ===");
+                //Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Read: {session.GetLastValue()} ===");
                 session.State = JobState.Write; // Need Answer
             }
             return session.State != JobState.Close;
@@ -29,7 +29,9 @@ namespace NetworkPool
 
         public async Task<bool> ProcessWrite(Session session)
         {
-            await session.WriteAsync($"Echo: {session.GetLastValue()}");
+            var value = session.GetLastValue();
+            //Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Write: {value} ===");
+            await session.WriteAsync($"Echo: {value}");
             session.State = JobState.Read;
 
             return session.State == JobState.Read;
