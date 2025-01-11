@@ -31,13 +31,17 @@ namespace NetworkPool
 
         protected SessionBuffer buffer = new SessionBuffer { Data = new byte[ushort.MaxValue] };
         private bool _disposed = false;
-        internal async Task<SessionBuffer> ReadAsync() => await Task.FromResult(Read());
+        internal Task ReadAsync()
+        {
+            Read();
+            return Task.CompletedTask;
+        }
         internal Task WriteAsync(string val)  
         {
             Write(val);
             return Task.CompletedTask;
         }
-        public SessionBuffer Read()
+        public void Read()
         {
             buffer.Size = -1;
             lock (Socket)
@@ -57,7 +61,6 @@ namespace NetworkPool
                 {
                     Socket.Blocking = true;
                 }
-                return buffer;
             }
         }
         public void Write(string val)

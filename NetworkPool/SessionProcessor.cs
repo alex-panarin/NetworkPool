@@ -12,7 +12,9 @@ namespace NetworkPool
     {
         public async Task<bool> ProcessRead(Session session)
         {
-            var buffer = await session.ReadAsync();
+            await session.ReadAsync();
+
+            var buffer = session.GetLastData();
             if (buffer.HasClosed)
             {
                 //Console.WriteLine($"=== Thread: {Environment.CurrentManagedThreadId} => Remove connection {session.Id} ===");
