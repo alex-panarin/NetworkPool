@@ -32,12 +32,7 @@ namespace NetworkPool
             SingleReader = false,
             SingleWriter = false,
         });
-        readonly Channel<TValue> _channelTwo = Channel.CreateUnbounded<TValue>(new UnboundedChannelOptions
-        {
-            AllowSynchronousContinuations = false,
-            SingleReader = false,
-            SingleWriter = false,
-        });
+        
         volatile bool _interrupted = true;
         private readonly Func<TValue, Task<bool>> _doReadJob;
         private readonly Func<TValue, Task<bool>> _doWriteJob;
@@ -51,19 +46,21 @@ namespace NetworkPool
             , int count = -1) 
             
         {
-            _doReadJob = doReadJob ?? DoRead;
-            _doWriteJob = doWriteJob ?? DoWrite;
-
+            if (count != -1 && count < 2) throw new ArgumentOutOfRangeException($"Count - {count} - should be grater than 2");
+            
             if (count == -1)
                 count = Environment.ProcessorCount / 2;
+
+            _doReadJob = doReadJob ?? DoRead;
+            _doWriteJob = doWriteJob ?? DoWrite;
 
             Debug.WriteLine($"Job queue start {count}");
 
             Enumerable.Range(0, count)
                 .ForEach(_ =>
                 {
-                    _tasks.Add(ProcessPool(_semaphoreRead, _queue, _channelOne.Writer, _channelTwo.Reader));
-                    _tasks.Add(ProcessJob(_semaphoreWrite, _queue, _channelOne.Reader, _channelTwo.Writer));
+                    _tasks.Add(ProcessPool(_semaphoreRead, _queue, _channelOne.Writer));
+                    _tasks.Add(ProcessJob(_semaphoreWrite, _queue, _channelOne.Reader));
                 });
         }
 
@@ -72,10 +69,9 @@ namespace NetworkPool
 
         public void AddJob(TValue val)
         {
-            //_queue.Enqueue(val);
-            _channelTwo.Writer.TryWrite(val);
+           _queue.Enqueue(val);
         }
-        private async Task ProcessPool(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer, ChannelReader<TValue> reader)
+        private async Task ProcessPool(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer)
         {
             await Task.Yield();
             //Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Start");
@@ -93,8 +89,7 @@ namespace NetworkPool
                     if (_cancellationTokenSource.IsCancellationRequested)
                         break;
 
-                    var val = await reader.ReadAsync(_cancellationTokenSource.Token);//queue.TryDequeue(out var val))
-                    
+                    if(queue.TryDequeue(out var val))
                     {
                         if (val.State == JobState.Read)
                         {
@@ -104,10 +99,9 @@ namespace NetworkPool
                         else if (val.State == JobState.Write)
                         {
                             var result = await _doWriteJob(val);
-                            if (result == false
-                                || val.State == JobState.Close)
+                            if (result && val.State != JobState.Close)
                             {
-                                continue;
+                                _queue.Enqueue(val);
                             }
                         }
                     }
@@ -117,7 +111,7 @@ namespace NetworkPool
             {
             }
         }
-        private async Task ProcessJob(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader, ChannelWriter<TValue> writer)
+        private async Task ProcessJob(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader)
         {
             await Task.Yield();
             //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Start");
@@ -139,8 +133,7 @@ namespace NetworkPool
                     //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId}, Set value: {val}");
 
                     if (await _doReadJob(val))
-                        await writer.WriteAsync(val, _cancellationTokenSource.Token);
-                        //queue.Enqueue(val);
+                        queue.Enqueue(val);
                 }
             }
             catch (OperationCanceledException)
