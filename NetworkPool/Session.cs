@@ -4,16 +4,19 @@ using System.Text;
 
 namespace NetworkPool
 {
-    record SessionBuffer
+    internal struct SessionBuffer
     {
-        public int Size = -1;
-        public byte[]? Data;
+        public SessionBuffer()
+        {
+            Size = -1;
+            Data = new byte[byte.MaxValue];
+        }
+        public int Size;
+        public byte[] Data;
         public bool HasClosed => Size == 0;
         public bool IsNotEmpty => Size > 0;
-        public string GetString() => IsNotEmpty && Data != null
-            ? Encoding.UTF8.GetString(Data, 0, Size)
-            : string.Empty;
-        public void Clear() => Data?.Clear();
+        public string GetString() => IsNotEmpty ? Encoding.UTF8.GetString(Data, 0, Size) : string.Empty;
+        public void Clear() => Data.Clear();
     }
     internal class Session
         : IJobState
@@ -26,10 +29,8 @@ namespace NetworkPool
         protected Socket Socket;
         public EndPoint? Address => Socket?.RemoteEndPoint;
         public string? Id => Address?.ToString();
-
         public JobState State { get; internal set; }
-
-        protected SessionBuffer buffer = new SessionBuffer { Data = new byte[ushort.MaxValue] };
+        protected SessionBuffer buffer = new();
         private bool _disposed = false;
         internal Task ReadAsync()
         {
@@ -71,8 +72,8 @@ namespace NetworkPool
                 {
                     var bytes = Encoding.UTF8.GetBytes(val);
                     buffer.Clear();
-                    Buffer.BlockCopy(bytes, 0, buffer.Data !, 0, bytes.Length);
-                    Socket.Send(buffer.Data !, bytes.Length, SocketFlags.None);
+                    Buffer.BlockCopy(bytes, 0, buffer.Data, 0, bytes.Length);
+                    Socket.Send(buffer.Data, bytes.Length, SocketFlags.None);
                 }
                 catch (SocketException)
                 {
