@@ -24,7 +24,7 @@ namespace NetworkPool
         readonly List<Task> _tasks = [];
         readonly SemaphoreSlim _semaphoreRead = new SemaphoreSlim(1);
         readonly SemaphoreSlim _semaphoreWrite = new SemaphoreSlim(1);
-        readonly ConcurrentQueue<TValue> _queue = [];
+        //readonly ConcurrentQueue<TValue> _queue = [];
         readonly CancellationTokenSource _cancellationTokenSource = new();
         readonly Channel<TValue> _channelOne = Channel.CreateUnbounded<TValue>(new UnboundedChannelOptions
         {
@@ -51,19 +51,21 @@ namespace NetworkPool
             , int count = -1) 
             
         {
-            _doReadJob = doReadJob ?? DoRead;
-            _doWriteJob = doWriteJob ?? DoWrite;
+            if(count != -1 && count < 2) throw new ArgumentOutOfRangeException($"Count - {count} - should be grater then 1");
 
             if (count == -1)
                 count = Environment.ProcessorCount / 2;
+
+            _doReadJob = doReadJob ?? DoRead;
+            _doWriteJob = doWriteJob ?? DoWrite;
 
             Debug.WriteLine($"Job queue start {count}");
 
             Enumerable.Range(0, count)
                 .ForEach(_ =>
                 {
-                    _tasks.Add(ProcessPool(_semaphoreRead, _queue, _channelOne.Writer, _channelTwo.Reader));
-                    _tasks.Add(ProcessJob(_semaphoreWrite, _queue, _channelOne.Reader, _channelTwo.Writer));
+                    _tasks.Add(ProcessPool(_semaphoreRead, _channelOne.Writer, _channelTwo.Reader));
+                    _tasks.Add(ProcessJob(_semaphoreWrite, _channelOne.Reader, _channelTwo.Writer));
                 });
         }
 
@@ -75,7 +77,7 @@ namespace NetworkPool
             //_queue.Enqueue(val);
             _channelTwo.Writer.TryWrite(val);
         }
-        private async Task ProcessPool(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelWriter<TValue> writer, ChannelReader<TValue> reader)
+        private async Task ProcessPool(SemaphoreSlim @event, ChannelWriter<TValue> writer, ChannelReader<TValue> reader)
         {
             await Task.Yield();
             //Debug.WriteLine($"Read Thread: {Environment.CurrentManagedThreadId} Start");
@@ -117,7 +119,7 @@ namespace NetworkPool
             {
             }
         }
-        private async Task ProcessJob(SemaphoreSlim @event, ConcurrentQueue<TValue> queue, ChannelReader<TValue> reader, ChannelWriter<TValue> writer)
+        private async Task ProcessJob(SemaphoreSlim @event, ChannelReader<TValue> reader, ChannelWriter<TValue> writer)
         {
             await Task.Yield();
             //Debug.WriteLine($"Write Thread: {Environment.CurrentManagedThreadId} Start");
@@ -158,7 +160,7 @@ namespace NetworkPool
             _semaphoreRead.Dispose();
             _semaphoreWrite.Dispose();
             _cancellationTokenSource.Dispose();
-            _queue.ForEach(s => { if (s is IDisposable disposable) disposable.Dispose(); });
+            //_queue.ForEach(s => { if (s is IDisposable disposable) disposable.Dispose(); });
         }
         internal void Close()
         {
